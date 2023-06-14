@@ -19,3 +19,16 @@ NuGet\Install-Package Edi.CacheAside.InMemory
 ```xml
 <PackageReference Include="Edi.CacheAside.InMemory" Version="1.0.0" />
 ```
+
+## Usage
+
+### ASP.NET Core
+
+```csharp
+services.AddInMemoryCacheAside();
+```
+
+TODO
+
+```csharp
+```
