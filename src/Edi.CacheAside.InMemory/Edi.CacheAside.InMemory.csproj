@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net6.0;net7.0</TargetFrameworks>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Authors>Edi Wang</Authors>
+        <Company>edi.wang</Company>
+        <PackageTags>Cache CacheAside</PackageTags>
+        <PackageProjectUrl>https://edi.wang</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/EdiWang/Edi.PasswordGenerator</RepositoryUrl>
+        <Version>1.0.0</Version>
+        <Description>In memory cache helpers for ASP.NET Core for implement cache aside pattern in small and non-distributed apps</Description>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>
