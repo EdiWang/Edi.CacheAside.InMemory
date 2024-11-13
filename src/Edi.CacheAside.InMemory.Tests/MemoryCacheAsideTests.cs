@@ -17,7 +17,7 @@ namespace Edi.CacheAside.InMemory.Tests
             var result = cacheAside.GetOrCreate<string>("testPartition", null, (_) => "testValue");
 
             // Assert
-            Assert.IsNull(result);
+            Assert.That(result == null);
         }
 
         [Test]
@@ -31,7 +31,7 @@ namespace Edi.CacheAside.InMemory.Tests
             var result = await cacheAside.GetOrCreateAsync<string>("testPartition", null, (_) => Task.FromResult("testValue"));
 
             // Assert
-            Assert.IsNull(result);
+            Assert.That(result == null);
         }
 
         //[Test]
