@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Edi.CacheAside.InMemory.Tests/Edi.CacheAside.InMemory.Tests.csproj" />
+  <Project Path="Edi.CacheAside.InMemory/Edi.CacheAside.InMemory.csproj" />
+</Solution>
