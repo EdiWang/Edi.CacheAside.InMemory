@@ -1,18 +1,17 @@
 using Microsoft.Extensions.Caching.Memory;
 using Moq;
 using System.Collections.Concurrent;
+using Xunit;
 
 namespace Edi.CacheAside.InMemory.Tests;
 
-[TestFixture]
-public class MemoryCacheAsideTests
+public class MemoryCacheAsideTests : IDisposable
 {
-    private Mock<IMemoryCache> _memoryCacheMock;
-    private MemoryCacheAside _cacheAside;
-    private ConcurrentDictionary<object, object> _cacheStorage;
+    private readonly Mock<IMemoryCache> _memoryCacheMock;
+    private readonly MemoryCacheAside _cacheAside;
+    private readonly ConcurrentDictionary<object, object> _cacheStorage;
 
-    [SetUp]
-    public void SetUp()
+    public MemoryCacheAsideTests()
     {
         _memoryCacheMock = new Mock<IMemoryCache>();
         _cacheStorage = new ConcurrentDictionary<object, object>();
@@ -59,20 +58,19 @@ public class MemoryCacheAsideTests
     // Delegate for TryGetValue callback
     private delegate bool TryGetValueCallback(object key, out object value);
 
-    [TearDown]
-    public void TearDown()
+    public void Dispose()
     {
         _cacheAside?.Dispose();
     }
 
-    [Test]
+    [Fact]
     public void Constructor_WithNullMemoryCache_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => new MemoryCacheAside(null!));
     }
 
-    [Test]
+    [Fact]
     public void GetOrCreate_WithValidParameters_ReturnsValue()
     {
         // Arrange
@@ -84,46 +82,49 @@ public class MemoryCacheAsideTests
         var result = _cacheAside.GetOrCreate(partition, key, _ => expectedValue);
 
         // Assert
-        Assert.That(result, Is.EqualTo(expectedValue));
-        Assert.That(_cacheAside.CachePartitions.ContainsKey(partition), Is.True);
-        Assert.That(_cacheAside.CachePartitions[partition], Contains.Item(key));
+        Assert.Equal(expectedValue, result);
+        Assert.True(_cacheAside.CachePartitions.ContainsKey(partition));
+        Assert.Contains(key, _cacheAside.CachePartitions[partition]);
     }
 
-    [TestCase(null)]
+    [Theory]
+    [InlineData(null)]
     public void GetOrCreate_WithInvalidPartition_ArgumentNullException(string partition)
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => _cacheAside.GetOrCreate(partition, "key", _ => "value"));
     }
 
-    [TestCase("")]
-    [TestCase(" ")]
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
     public void GetOrCreate_WithInvalidPartition_ThrowsArgumentException(string partition)
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _cacheAside.GetOrCreate(partition, "key", _ => "value"));
     }
 
-    [TestCase(null)]
-    [TestCase("")]
-    [TestCase(" ")]
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
     public void GetOrCreate_WithInvalidKey_ReturnsDefault(string key)
     {
         // Act
         var result = _cacheAside.GetOrCreate<string>("partition", key, _ => "value");
 
         // Assert
-        Assert.That(result, Is.Null);
+        Assert.Null(result);
     }
 
-    [Test]
+    [Fact]
     public void GetOrCreate_WithNullFactory_ThrowsArgumentNullException()
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => _cacheAside.GetOrCreate<string>("partition", "key", null!));
     }
 
-    [Test]
+    [Fact]
     public void GetOrCreate_CalledTwiceWithSameKey_ReturnsCachedValue()
     {
         // Arrange
@@ -136,12 +137,12 @@ public class MemoryCacheAsideTests
         var result2 = _cacheAside.GetOrCreate(partition, key, _ => $"value-{++callCount}");
 
         // Assert
-        Assert.That(result1, Is.EqualTo("value-1"));
-        Assert.That(result2, Is.EqualTo("value-1"));
-        Assert.That(callCount, Is.EqualTo(1));
+        Assert.Equal("value-1", result1);
+        Assert.Equal("value-1", result2);
+        Assert.Equal(1, callCount);
     }
 
-    [Test]
+    [Fact]
     public async Task GetOrCreateAsync_WithValidParameters_ReturnsValue()
     {
         // Arrange
@@ -153,46 +154,49 @@ public class MemoryCacheAsideTests
         var result = await _cacheAside.GetOrCreateAsync(partition, key, _ => Task.FromResult(expectedValue));
 
         // Assert
-        Assert.That(result, Is.EqualTo(expectedValue));
-        Assert.That(_cacheAside.CachePartitions.ContainsKey(partition), Is.True);
-        Assert.That(_cacheAside.CachePartitions[partition], Contains.Item(key));
+        Assert.Equal(expectedValue, result);
+        Assert.True(_cacheAside.CachePartitions.ContainsKey(partition));
+        Assert.Contains(key, _cacheAside.CachePartitions[partition]);
     }
 
-    [TestCase(null)]
-    public void GetOrCreateAsync_WithInvalidPartition_ThrowsArgumentNullException(string partition)
+    [Theory]
+    [InlineData(null)]
+    public async Task GetOrCreateAsync_WithInvalidPartition_ThrowsArgumentNullException(string partition)
     {
         // Act & Assert
-        Assert.ThrowsAsync<ArgumentNullException>(() => _cacheAside.GetOrCreateAsync(partition, "key", _ => Task.FromResult("value")));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _cacheAside.GetOrCreateAsync(partition, "key", _ => Task.FromResult("value")));
     }
 
-    [TestCase("")]
-    [TestCase(" ")]
-    public void GetOrCreateAsync_WithInvalidPartition_ThrowsArgumentException(string partition)
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task GetOrCreateAsync_WithInvalidPartition_ThrowsArgumentException(string partition)
     {
         // Act & Assert
-        Assert.ThrowsAsync<ArgumentException>(() => _cacheAside.GetOrCreateAsync(partition, "key", _ => Task.FromResult("value")));
+        await Assert.ThrowsAsync<ArgumentException>(() => _cacheAside.GetOrCreateAsync(partition, "key", _ => Task.FromResult("value")));
     }
 
-    [TestCase(null)]
-    [TestCase("")]
-    [TestCase(" ")]
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
     public async Task GetOrCreateAsync_WithInvalidKey_ReturnsDefault(string key)
     {
         // Act
         var result = await _cacheAside.GetOrCreateAsync<string>("partition", key, _ => Task.FromResult("value"));
 
         // Assert
-        Assert.That(result, Is.Null);
+        Assert.Null(result);
     }
 
-    [Test]
-    public void GetOrCreateAsync_WithNullFactory_ThrowsArgumentNullException()
+    [Fact]
+    public async Task GetOrCreateAsync_WithNullFactory_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.ThrowsAsync<ArgumentNullException>(() => _cacheAside.GetOrCreateAsync<string>("partition", "key", null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _cacheAside.GetOrCreateAsync<string>("partition", "key", null!));
     }
 
-    [Test]
+    [Fact]
     public async Task GetOrCreateAsync_CalledTwiceWithSameKey_ReturnsCachedValue()
     {
         // Arrange
@@ -205,12 +209,12 @@ public class MemoryCacheAsideTests
         var result2 = await _cacheAside.GetOrCreateAsync(partition, key, _ => Task.FromResult($"value-{++callCount}"));
 
         // Assert
-        Assert.That(result1, Is.EqualTo("value-1"));
-        Assert.That(result2, Is.EqualTo("value-1"));
-        Assert.That(callCount, Is.EqualTo(1));
+        Assert.Equal("value-1", result1);
+        Assert.Equal("value-1", result2);
+        Assert.Equal(1, callCount);
     }
 
-    [Test]
+    [Fact]
     public void Clear_RemovesAllCacheEntriesAndPartitions()
     {
         // Arrange
@@ -222,13 +226,13 @@ public class MemoryCacheAsideTests
         _cacheAside.Clear();
 
         // Assert
-        Assert.That(_cacheAside.CachePartitions, Is.Empty);
+        Assert.Empty(_cacheAside.CachePartitions);
         _memoryCacheMock.Verify(x => x.Remove("partition1-key1"), Times.Once);
         _memoryCacheMock.Verify(x => x.Remove("partition1-key2"), Times.Once);
         _memoryCacheMock.Verify(x => x.Remove("partition2-key3"), Times.Once);
     }
 
-    [Test]
+    [Fact]
     public void Remove_WithValidPartition_RemovesAllKeysInPartition()
     {
         // Arrange
@@ -241,36 +245,38 @@ public class MemoryCacheAsideTests
         _cacheAside.Remove(partition);
 
         // Assert
-        Assert.That(_cacheAside.CachePartitions.ContainsKey(partition), Is.False);
-        Assert.That(_cacheAside.CachePartitions.ContainsKey("other-partition"), Is.True);
+        Assert.False(_cacheAside.CachePartitions.ContainsKey(partition));
+        Assert.True(_cacheAside.CachePartitions.ContainsKey("other-partition"));
         _memoryCacheMock.Verify(x => x.Remove("test-partition-key1"), Times.Once);
         _memoryCacheMock.Verify(x => x.Remove("test-partition-key2"), Times.Once);
         _memoryCacheMock.Verify(x => x.Remove("other-partition-key3"), Times.Never);
     }
 
-    [TestCase(null)]
+    [Theory]
+    [InlineData(null)]
     public void Remove_WithInvalidPartition_ThrowsArgumentNullException(string partition)
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => _cacheAside.Remove(partition));
     }
 
-    [TestCase("")]
-    [TestCase(" ")]
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
     public void Remove_WithInvalidPartition_ThrowsArgumentException(string partition)
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _cacheAside.Remove(partition));
     }
 
-    [Test]
+    [Fact]
     public void Remove_WithNonExistentPartition_DoesNotThrow()
     {
         // Act & Assert
-        Assert.DoesNotThrow(() => _cacheAside.Remove("non-existent"));
+        _cacheAside.Remove("non-existent");
     }
 
-    [Test]
+    [Fact]
     public void Remove_WithPartitionAndKey_RemovesSpecificCacheEntry()
     {
         // Arrange
@@ -286,28 +292,30 @@ public class MemoryCacheAsideTests
         _memoryCacheMock.Verify(x => x.Remove("test-partition-test-key"), Times.Once);
         _memoryCacheMock.Verify(x => x.Remove("test-partition-other-key"), Times.Never);
         // Note: CachePartitions still contains the partition as ConcurrentBag doesn't support efficient removal
-        Assert.That(_cacheAside.CachePartitions.ContainsKey(partition), Is.True);
+        Assert.True(_cacheAside.CachePartitions.ContainsKey(partition));
     }
 
-    [TestCase(null, "key")]
-    [TestCase("partition", null)]
+    [Theory]
+    [InlineData(null, "key")]
+    [InlineData("partition", null)]
     public void Remove_WithInvalidPartitionOrKey_ThrowsArgumentNullException(string partition, string key)
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => _cacheAside.Remove(partition, key));
     }
 
-    [TestCase("", "key")]
-    [TestCase(" ", "key")]
-    [TestCase("partition", "")]
-    [TestCase("partition", " ")]
+    [Theory]
+    [InlineData("", "key")]
+    [InlineData(" ", "key")]
+    [InlineData("partition", "")]
+    [InlineData("partition", " ")]
     public void Remove_WithInvalidPartitionOrKey_ThrowsArgumentException(string partition, string key)
     {
         // Act & Assert
         Assert.Throws<ArgumentException>(() => _cacheAside.Remove(partition, key));
     }
 
-    [Test]
+    [Fact]
     public void CachePartitions_IsThreadSafe()
     {
         // Arrange
@@ -331,14 +339,14 @@ public class MemoryCacheAsideTests
         Task.WaitAll(tasks);
 
         // Assert
-        Assert.That(_cacheAside.CachePartitions.Count, Is.EqualTo(taskCount));
+        Assert.Equal(taskCount, _cacheAside.CachePartitions.Count);
         foreach (var partition in _cacheAside.CachePartitions)
         {
-            Assert.That(partition.Value.Count, Is.EqualTo(operationsPerTask));
+            Assert.Equal(operationsPerTask, partition.Value.Count);
         }
     }
 
-    [Test]
+    [Fact]
     public void Dispose_CallsClear()
     {
         // Arrange
@@ -348,11 +356,11 @@ public class MemoryCacheAsideTests
         _cacheAside.Dispose();
 
         // Assert
-        Assert.That(_cacheAside.CachePartitions, Is.Empty);
+        Assert.Empty(_cacheAside.CachePartitions);
         _memoryCacheMock.Verify(x => x.Remove("partition-key"), Times.Once);
     }
 
-    [Test]
+    [Fact]
     public void Dispose_CalledMultipleTimes_OnlyClearsOnce()
     {
         // Arrange
@@ -366,7 +374,7 @@ public class MemoryCacheAsideTests
         _memoryCacheMock.Verify(x => x.Remove("partition-key"), Times.Once);
     }
 
-    [Test]
+    [Fact]
     public void GetOrCreate_AfterDispose_ThrowsObjectDisposedException()
     {
         // Arrange
@@ -376,17 +384,17 @@ public class MemoryCacheAsideTests
         Assert.Throws<ObjectDisposedException>(() => _cacheAside.GetOrCreate("partition", "key", _ => "value"));
     }
 
-    [Test]
-    public void GetOrCreateAsync_AfterDispose_ThrowsObjectDisposedException()
+    [Fact]
+    public async Task GetOrCreateAsync_AfterDispose_ThrowsObjectDisposedException()
     {
         // Arrange
         _cacheAside.Dispose();
 
         // Act & Assert
-        Assert.ThrowsAsync<ObjectDisposedException>(() => _cacheAside.GetOrCreateAsync("partition", "key", _ => Task.FromResult("value")));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => _cacheAside.GetOrCreateAsync("partition", "key", _ => Task.FromResult("value")));
     }
 
-    [Test]
+    [Fact]
     public void Clear_AfterDispose_ThrowsObjectDisposedException()
     {
         // Arrange
@@ -396,7 +404,7 @@ public class MemoryCacheAsideTests
         Assert.Throws<ObjectDisposedException>(() => _cacheAside.Clear());
     }
 
-    [Test]
+    [Fact]
     public void Remove_AfterDispose_ThrowsObjectDisposedException()
     {
         // Arrange
@@ -406,7 +414,7 @@ public class MemoryCacheAsideTests
         Assert.Throws<ObjectDisposedException>(() => _cacheAside.Remove("partition"));
     }
 
-    [Test]
+    [Fact]
     public void BuildCacheKey_CreatesCorrectFormat()
     {
         // This tests the internal behavior through public methods
