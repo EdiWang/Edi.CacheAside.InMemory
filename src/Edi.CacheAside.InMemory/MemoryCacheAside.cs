@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 
 namespace Edi.CacheAside.InMemory;
 
-public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside, IDisposable
+public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside
 {
     /* Create Key-Value mapping for cache divisions to workaround
      * https://github.com/aspnet/Caching/issues/422
@@ -14,16 +14,15 @@ public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside, IDisposab
      * Post              | { "<guid>", "<guid>", "<guid"> ... }
      * General           | { "avatar", ... }
      */
-    public ConcurrentDictionary<string, ConcurrentBag<string>> CachePartitions { get; } = new();
+    internal ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> CachePartitions { get; } = new();
 
     private readonly IMemoryCache _memoryCache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
     private bool _disposed;
 
-    public TItem GetOrCreate<TItem>(string partition, string key, Func<ICacheEntry, TItem> factory)
+    public TItem? GetOrCreate<TItem>(string partition, string key, Func<ICacheEntry, TItem> factory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(partition);
-        if (string.IsNullOrWhiteSpace(key))
-            return default;
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ArgumentNullException.ThrowIfNull(factory);
 
         ThrowIfDisposed();
@@ -33,18 +32,17 @@ public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside, IDisposab
         return _memoryCache.GetOrCreate(cacheKey, factory);
     }
 
-    public Task<TItem> GetOrCreateAsync<TItem>(string partition, string key, Func<ICacheEntry, Task<TItem>> factory)
+    public Task<TItem?> GetOrCreateAsync<TItem>(string partition, string key, Func<ICacheEntry, Task<TItem>> factory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(partition);
-        if (string.IsNullOrWhiteSpace(key))
-            return Task.FromResult(default(TItem));
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ArgumentNullException.ThrowIfNull(factory);
 
         ThrowIfDisposed();
 
         var cacheKey = BuildCacheKey(partition, key);
         AddToPartition(partition, key);
-        return _memoryCache.GetOrCreateAsync(cacheKey, factory)!;
+        return _memoryCache.GetOrCreateAsync(cacheKey, factory);
     }
 
     public void Clear()
@@ -52,7 +50,7 @@ public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside, IDisposab
         ThrowIfDisposed();
 
         var allKeys = CachePartitions
-            .SelectMany(kvp => kvp.Value.Select(key => BuildCacheKey(kvp.Key, key)))
+            .SelectMany(kvp => kvp.Value.Keys.Select(key => BuildCacheKey(kvp.Key, key)))
             .ToList();
 
         foreach (var key in allKeys)
@@ -71,7 +69,7 @@ public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside, IDisposab
         if (!CachePartitions.TryGetValue(partition, out var cacheKeys))
             return;
 
-        foreach (var key in cacheKeys)
+        foreach (var key in cacheKeys.Keys)
         {
             _memoryCache.Remove(BuildCacheKey(partition, key));
         }
@@ -88,21 +86,24 @@ public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside, IDisposab
         var cacheKey = BuildCacheKey(partition, key);
         _memoryCache.Remove(cacheKey);
 
-        // Note: We don't remove from CachePartitions here as ConcurrentBag doesn't support efficient removal
-        // This is a trade-off for thread safety. The partition will be cleaned up on Clear() or Remove(partition)
+        if (CachePartitions.TryGetValue(partition, out var keys))
+        {
+            keys.TryRemove(key, out _);
+
+            if (keys.IsEmpty)
+            {
+                CachePartitions.TryRemove(partition, out _);
+            }
+        }
     }
 
     private void AddToPartition(string partitionKey, string cacheKey)
     {
-        // Use GetOrAdd for thread-safe initialization
-        var partition = CachePartitions.GetOrAdd(partitionKey, _ => new ConcurrentBag<string>());
-
-        // ConcurrentBag allows duplicates, but that's acceptable for this use case
-        // as it's more performant than checking for existence
-        partition.Add(cacheKey);
+        var partition = CachePartitions.GetOrAdd(partitionKey, _ => new ConcurrentDictionary<string, byte>());
+        partition.TryAdd(cacheKey, 0);
     }
 
-    private static string BuildCacheKey(string partition, string key) => $"{partition}-{key}";
+    private static string BuildCacheKey(string partition, string key) => $"{partition}::{key}";
 
     private void ThrowIfDisposed()
     {

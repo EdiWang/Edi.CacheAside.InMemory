@@ -84,12 +84,12 @@ public class MemoryCacheAsideTests : IDisposable
         // Assert
         Assert.Equal(expectedValue, result);
         Assert.True(_cacheAside.CachePartitions.ContainsKey(partition));
-        Assert.Contains(key, _cacheAside.CachePartitions[partition]);
+        Assert.True(_cacheAside.CachePartitions[partition].ContainsKey(key));
     }
 
     [Theory]
     [InlineData(null)]
-    public void GetOrCreate_WithInvalidPartition_ArgumentNullException(string partition)
+    public void GetOrCreate_WithInvalidPartition_ThrowsArgumentNullException(string partition)
     {
         // Act & Assert
         Assert.Throws<ArgumentNullException>(() => _cacheAside.GetOrCreate(partition, "key", _ => "value"));
@@ -106,15 +106,19 @@ public class MemoryCacheAsideTests : IDisposable
 
     [Theory]
     [InlineData(null)]
+    public void GetOrCreate_WithNullKey_ThrowsArgumentNullException(string key)
+    {
+        // Act & Assert
+        Assert.Throws<ArgumentNullException>(() => _cacheAside.GetOrCreate<string>("partition", key, _ => "value"));
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData(" ")]
-    public void GetOrCreate_WithInvalidKey_ReturnsDefault(string key)
+    public void GetOrCreate_WithEmptyOrWhitespaceKey_ThrowsArgumentException(string key)
     {
-        // Act
-        var result = _cacheAside.GetOrCreate<string>("partition", key, _ => "value");
-
-        // Assert
-        Assert.Null(result);
+        // Act & Assert
+        Assert.Throws<ArgumentException>(() => _cacheAside.GetOrCreate<string>("partition", key, _ => "value"));
     }
 
     [Fact]
@@ -156,7 +160,7 @@ public class MemoryCacheAsideTests : IDisposable
         // Assert
         Assert.Equal(expectedValue, result);
         Assert.True(_cacheAside.CachePartitions.ContainsKey(partition));
-        Assert.Contains(key, _cacheAside.CachePartitions[partition]);
+        Assert.True(_cacheAside.CachePartitions[partition].ContainsKey(key));
     }
 
     [Theory]
@@ -178,15 +182,19 @@ public class MemoryCacheAsideTests : IDisposable
 
     [Theory]
     [InlineData(null)]
+    public async Task GetOrCreateAsync_WithNullKey_ThrowsArgumentNullException(string key)
+    {
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _cacheAside.GetOrCreateAsync<string>("partition", key, _ => Task.FromResult("value")));
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData(" ")]
-    public async Task GetOrCreateAsync_WithInvalidKey_ReturnsDefault(string key)
+    public async Task GetOrCreateAsync_WithEmptyOrWhitespaceKey_ThrowsArgumentException(string key)
     {
-        // Act
-        var result = await _cacheAside.GetOrCreateAsync<string>("partition", key, _ => Task.FromResult("value"));
-
-        // Assert
-        Assert.Null(result);
+        // Act & Assert
+        await Assert.ThrowsAsync<ArgumentException>(() => _cacheAside.GetOrCreateAsync<string>("partition", key, _ => Task.FromResult("value")));
     }
 
     [Fact]
@@ -227,9 +235,9 @@ public class MemoryCacheAsideTests : IDisposable
 
         // Assert
         Assert.Empty(_cacheAside.CachePartitions);
-        _memoryCacheMock.Verify(x => x.Remove("partition1-key1"), Times.Once);
-        _memoryCacheMock.Verify(x => x.Remove("partition1-key2"), Times.Once);
-        _memoryCacheMock.Verify(x => x.Remove("partition2-key3"), Times.Once);
+        _memoryCacheMock.Verify(x => x.Remove("partition1::key1"), Times.Once);
+        _memoryCacheMock.Verify(x => x.Remove("partition1::key2"), Times.Once);
+        _memoryCacheMock.Verify(x => x.Remove("partition2::key3"), Times.Once);
     }
 
     [Fact]
@@ -247,9 +255,9 @@ public class MemoryCacheAsideTests : IDisposable
         // Assert
         Assert.False(_cacheAside.CachePartitions.ContainsKey(partition));
         Assert.True(_cacheAside.CachePartitions.ContainsKey("other-partition"));
-        _memoryCacheMock.Verify(x => x.Remove("test-partition-key1"), Times.Once);
-        _memoryCacheMock.Verify(x => x.Remove("test-partition-key2"), Times.Once);
-        _memoryCacheMock.Verify(x => x.Remove("other-partition-key3"), Times.Never);
+        _memoryCacheMock.Verify(x => x.Remove("test-partition::key1"), Times.Once);
+        _memoryCacheMock.Verify(x => x.Remove("test-partition::key2"), Times.Once);
+        _memoryCacheMock.Verify(x => x.Remove("other-partition::key3"), Times.Never);
     }
 
     [Theory]
@@ -289,10 +297,11 @@ public class MemoryCacheAsideTests : IDisposable
         _cacheAside.Remove(partition, key);
 
         // Assert
-        _memoryCacheMock.Verify(x => x.Remove("test-partition-test-key"), Times.Once);
-        _memoryCacheMock.Verify(x => x.Remove("test-partition-other-key"), Times.Never);
-        // Note: CachePartitions still contains the partition as ConcurrentBag doesn't support efficient removal
+        _memoryCacheMock.Verify(x => x.Remove("test-partition::test-key"), Times.Once);
+        _memoryCacheMock.Verify(x => x.Remove("test-partition::other-key"), Times.Never);
         Assert.True(_cacheAside.CachePartitions.ContainsKey(partition));
+        Assert.False(_cacheAside.CachePartitions[partition].ContainsKey(key));
+        Assert.True(_cacheAside.CachePartitions[partition].ContainsKey("other-key"));
     }
 
     [Theory]
@@ -357,7 +366,7 @@ public class MemoryCacheAsideTests : IDisposable
 
         // Assert
         Assert.Empty(_cacheAside.CachePartitions);
-        _memoryCacheMock.Verify(x => x.Remove("partition-key"), Times.Once);
+        _memoryCacheMock.Verify(x => x.Remove("partition::key"), Times.Once);
     }
 
     [Fact]
@@ -371,7 +380,7 @@ public class MemoryCacheAsideTests : IDisposable
         _cacheAside.Dispose();
 
         // Assert
-        _memoryCacheMock.Verify(x => x.Remove("partition-key"), Times.Once);
+        _memoryCacheMock.Verify(x => x.Remove("partition::key"), Times.Once);
     }
 
     [Fact]
@@ -422,6 +431,6 @@ public class MemoryCacheAsideTests : IDisposable
         _cacheAside.GetOrCreate("test-partition", "test-key", _ => "value");
 
         // Assert
-        _memoryCacheMock.Verify(x => x.CreateEntry("test-partition-test-key"), Times.Once);
+        _memoryCacheMock.Verify(x => x.CreateEntry("test-partition::test-key"), Times.Once);
     }
 }

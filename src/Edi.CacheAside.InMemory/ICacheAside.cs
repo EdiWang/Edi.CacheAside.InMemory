@@ -2,10 +2,10 @@
 
 namespace Edi.CacheAside.InMemory;
 
-public interface ICacheAside
+public interface ICacheAside : IDisposable
 {
-    TItem GetOrCreate<TItem>(string partition, string key, Func<ICacheEntry, TItem> factory);
-    Task<TItem> GetOrCreateAsync<TItem>(string partition, string key, Func<ICacheEntry, Task<TItem>> factory);
+    TItem? GetOrCreate<TItem>(string partition, string key, Func<ICacheEntry, TItem> factory);
+    Task<TItem?> GetOrCreateAsync<TItem>(string partition, string key, Func<ICacheEntry, Task<TItem>> factory);
     void Clear();
     void Remove(string partition);
     void Remove(string partition, string key);

@@ -3,12 +3,13 @@
     <TargetFrameworks>net10.0</TargetFrameworks>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
     <Authors>Edi Wang</Authors>
     <Company>edi.wang</Company>
     <PackageTags>Cache CacheAside</PackageTags>
     <PackageProjectUrl>https://edi.wang</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/EdiWang/Edi.PasswordGenerator</RepositoryUrl>
-    <Version>2.1.0</Version>
+    <RepositoryUrl>https://github.com/EdiWang/Edi.CacheAside.InMemory</RepositoryUrl>
+    <Version>3.0.0</Version>
     <Description>In memory cache helpers for ASP.NET Core for implement cache aside pattern in small and non-distributed apps</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>edi-logo-blue.png</PackageIcon>
@@ -16,11 +17,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.*" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.*" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
-    <None Include="..\..\img\edi-logo-blue.png" Pack="true" PackagePath="\"/>
+    <InternalsVisibleTo Include="Edi.CacheAside.InMemory.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\img\edi-logo-blue.png" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>
