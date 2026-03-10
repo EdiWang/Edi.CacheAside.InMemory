@@ -19,7 +19,7 @@ jobs:
       run: dotnet build --configuration Release
       working-directory: ./src
     - name: Run unit tests
-      run: dotnet test --configuration Release
+      run: dotnet run --project ./Edi.CacheAside.InMemory.Tests/Edi.CacheAside.InMemory.Tests.csproj --configuration Release --no-build
       working-directory: ./src
     - name: Generate nuget package
       run: dotnet pack --configuration Release -o nupkg
