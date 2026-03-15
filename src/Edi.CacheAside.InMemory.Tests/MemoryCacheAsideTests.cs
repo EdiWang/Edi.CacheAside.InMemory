@@ -40,11 +40,16 @@ public class MemoryCacheAsideTests : IDisposable
                 mockEntry.SetupProperty(e => e.AbsoluteExpirationRelativeToNow);
                 mockEntry.SetupProperty(e => e.SlidingExpiration);
                 mockEntry.SetupProperty(e => e.Priority);
-                
+                mockEntry.SetupProperty(e => e.Size);
+
+                // Setup PostEvictionCallbacks as a real list for SetOptions support
+                mockEntry.SetupGet(e => e.PostEvictionCallbacks)
+                    .Returns(new List<PostEvictionCallbackRegistration>());
+
                 // When Value is set, store it in our dictionary
                 mockEntry.SetupSet(e => e.Value = It.IsAny<object>())
                     .Callback<object>(value => _cacheStorage.TryAdd(key, value));
-                
+
                 return mockEntry.Object;
             });
 
@@ -79,7 +84,7 @@ public class MemoryCacheAsideTests : IDisposable
         const string expectedValue = "test-value";
 
         // Act
-        var result = _cacheAside.GetOrCreate(partition, key, _ => expectedValue);
+        var result = _cacheAside.GetOrCreate(partition, key, () => expectedValue);
 
         // Assert
         Assert.Equal(expectedValue, result);
@@ -92,7 +97,7 @@ public class MemoryCacheAsideTests : IDisposable
     public void GetOrCreate_WithInvalidPartition_ThrowsArgumentNullException(string partition)
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => _cacheAside.GetOrCreate(partition, "key", _ => "value"));
+        Assert.Throws<ArgumentNullException>(() => _cacheAside.GetOrCreate(partition, "key", () => "value"));
     }
 
     [Theory]
@@ -101,7 +106,7 @@ public class MemoryCacheAsideTests : IDisposable
     public void GetOrCreate_WithInvalidPartition_ThrowsArgumentException(string partition)
     {
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => _cacheAside.GetOrCreate(partition, "key", _ => "value"));
+        Assert.Throws<ArgumentException>(() => _cacheAside.GetOrCreate(partition, "key", () => "value"));
     }
 
     [Theory]
@@ -109,7 +114,7 @@ public class MemoryCacheAsideTests : IDisposable
     public void GetOrCreate_WithNullKey_ThrowsArgumentNullException(string key)
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => _cacheAside.GetOrCreate<string>("partition", key, _ => "value"));
+        Assert.Throws<ArgumentNullException>(() => _cacheAside.GetOrCreate<string>("partition", key, () => "value"));
     }
 
     [Theory]
@@ -118,14 +123,14 @@ public class MemoryCacheAsideTests : IDisposable
     public void GetOrCreate_WithEmptyOrWhitespaceKey_ThrowsArgumentException(string key)
     {
         // Act & Assert
-        Assert.Throws<ArgumentException>(() => _cacheAside.GetOrCreate<string>("partition", key, _ => "value"));
+        Assert.Throws<ArgumentException>(() => _cacheAside.GetOrCreate<string>("partition", key, () => "value"));
     }
 
     [Fact]
     public void GetOrCreate_WithNullFactory_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => _cacheAside.GetOrCreate<string>("partition", "key", null!));
+        Assert.Throws<ArgumentNullException>(() => _cacheAside.GetOrCreate<string>("partition", "key", (Func<string>)null!));
     }
 
     [Fact]
@@ -137,8 +142,8 @@ public class MemoryCacheAsideTests : IDisposable
         var callCount = 0;
 
         // Act
-        var result1 = _cacheAside.GetOrCreate(partition, key, _ => $"value-{++callCount}");
-        var result2 = _cacheAside.GetOrCreate(partition, key, _ => $"value-{++callCount}");
+        var result1 = _cacheAside.GetOrCreate(partition, key, () => $"value-{++callCount}");
+        var result2 = _cacheAside.GetOrCreate(partition, key, () => $"value-{++callCount}");
 
         // Assert
         Assert.Equal("value-1", result1);
@@ -155,7 +160,7 @@ public class MemoryCacheAsideTests : IDisposable
         const string expectedValue = "test-value";
 
         // Act
-        var result = await _cacheAside.GetOrCreateAsync(partition, key, _ => Task.FromResult(expectedValue));
+        var result = await _cacheAside.GetOrCreateAsync(partition, key, () => Task.FromResult(expectedValue));
 
         // Assert
         Assert.Equal(expectedValue, result);
@@ -168,7 +173,7 @@ public class MemoryCacheAsideTests : IDisposable
     public async Task GetOrCreateAsync_WithInvalidPartition_ThrowsArgumentNullException(string partition)
     {
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentNullException>(() => _cacheAside.GetOrCreateAsync(partition, "key", _ => Task.FromResult("value")));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _cacheAside.GetOrCreateAsync(partition, "key", () => Task.FromResult("value")));
     }
 
     [Theory]
@@ -177,7 +182,7 @@ public class MemoryCacheAsideTests : IDisposable
     public async Task GetOrCreateAsync_WithInvalidPartition_ThrowsArgumentException(string partition)
     {
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() => _cacheAside.GetOrCreateAsync(partition, "key", _ => Task.FromResult("value")));
+        await Assert.ThrowsAsync<ArgumentException>(() => _cacheAside.GetOrCreateAsync(partition, "key", () => Task.FromResult("value")));
     }
 
     [Theory]
@@ -185,7 +190,7 @@ public class MemoryCacheAsideTests : IDisposable
     public async Task GetOrCreateAsync_WithNullKey_ThrowsArgumentNullException(string key)
     {
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentNullException>(() => _cacheAside.GetOrCreateAsync<string>("partition", key, _ => Task.FromResult("value")));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _cacheAside.GetOrCreateAsync<string>("partition", key, () => Task.FromResult("value")));
     }
 
     [Theory]
@@ -194,14 +199,14 @@ public class MemoryCacheAsideTests : IDisposable
     public async Task GetOrCreateAsync_WithEmptyOrWhitespaceKey_ThrowsArgumentException(string key)
     {
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentException>(() => _cacheAside.GetOrCreateAsync<string>("partition", key, _ => Task.FromResult("value")));
+        await Assert.ThrowsAsync<ArgumentException>(() => _cacheAside.GetOrCreateAsync<string>("partition", key, () => Task.FromResult("value")));
     }
 
     [Fact]
     public async Task GetOrCreateAsync_WithNullFactory_ThrowsArgumentNullException()
     {
         // Act & Assert
-        await Assert.ThrowsAsync<ArgumentNullException>(() => _cacheAside.GetOrCreateAsync<string>("partition", "key", null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _cacheAside.GetOrCreateAsync<string>("partition", "key", (Func<Task<string>>)null!));
     }
 
     [Fact]
@@ -213,8 +218,8 @@ public class MemoryCacheAsideTests : IDisposable
         var callCount = 0;
 
         // Act
-        var result1 = await _cacheAside.GetOrCreateAsync(partition, key, _ => Task.FromResult($"value-{++callCount}"));
-        var result2 = await _cacheAside.GetOrCreateAsync(partition, key, _ => Task.FromResult($"value-{++callCount}"));
+        var result1 = await _cacheAside.GetOrCreateAsync(partition, key, () => Task.FromResult($"value-{++callCount}"));
+        var result2 = await _cacheAside.GetOrCreateAsync(partition, key, () => Task.FromResult($"value-{++callCount}"));
 
         // Assert
         Assert.Equal("value-1", result1);
@@ -226,9 +231,9 @@ public class MemoryCacheAsideTests : IDisposable
     public void Clear_RemovesAllCacheEntriesAndPartitions()
     {
         // Arrange
-        _cacheAside.GetOrCreate("partition1", "key1", _ => "value1");
-        _cacheAside.GetOrCreate("partition1", "key2", _ => "value2");
-        _cacheAside.GetOrCreate("partition2", "key3", _ => "value3");
+        _cacheAside.GetOrCreate("partition1", "key1", () => "value1");
+        _cacheAside.GetOrCreate("partition1", "key2", () => "value2");
+        _cacheAside.GetOrCreate("partition2", "key3", () => "value3");
 
         // Act
         _cacheAside.Clear();
@@ -245,9 +250,9 @@ public class MemoryCacheAsideTests : IDisposable
     {
         // Arrange
         const string partition = "test-partition";
-        _cacheAside.GetOrCreate(partition, "key1", _ => "value1");
-        _cacheAside.GetOrCreate(partition, "key2", _ => "value2");
-        _cacheAside.GetOrCreate("other-partition", "key3", _ => "value3");
+        _cacheAside.GetOrCreate(partition, "key1", () => "value1");
+        _cacheAside.GetOrCreate(partition, "key2", () => "value2");
+        _cacheAside.GetOrCreate("other-partition", "key3", () => "value3");
 
         // Act
         _cacheAside.Remove(partition);
@@ -290,8 +295,8 @@ public class MemoryCacheAsideTests : IDisposable
         // Arrange
         const string partition = "test-partition";
         const string key = "test-key";
-        _cacheAside.GetOrCreate(partition, key, _ => "value");
-        _cacheAside.GetOrCreate(partition, "other-key", _ => "other-value");
+        _cacheAside.GetOrCreate(partition, key, () => "value");
+        _cacheAside.GetOrCreate(partition, "other-key", () => "other-value");
 
         // Act
         _cacheAside.Remove(partition, key);
@@ -340,7 +345,7 @@ public class MemoryCacheAsideTests : IDisposable
             {
                 for (int j = 0; j < operationsPerTask; j++)
                 {
-                    _cacheAside.GetOrCreate($"partition-{taskIndex}", $"key-{j}", _ => $"value-{taskIndex}-{j}");
+                    _cacheAside.GetOrCreate($"partition-{taskIndex}", $"key-{j}", () => $"value-{taskIndex}-{j}");
                 }
             });
         }
@@ -359,7 +364,7 @@ public class MemoryCacheAsideTests : IDisposable
     public void Dispose_CallsClear()
     {
         // Arrange
-        _cacheAside.GetOrCreate("partition", "key", _ => "value");
+        _cacheAside.GetOrCreate("partition", "key", () => "value");
 
         // Act
         _cacheAside.Dispose();
@@ -373,7 +378,7 @@ public class MemoryCacheAsideTests : IDisposable
     public void Dispose_CalledMultipleTimes_OnlyClearsOnce()
     {
         // Arrange
-        _cacheAside.GetOrCreate("partition", "key", _ => "value");
+        _cacheAside.GetOrCreate("partition", "key", () => "value");
 
         // Act
         _cacheAside.Dispose();
@@ -390,7 +395,7 @@ public class MemoryCacheAsideTests : IDisposable
         _cacheAside.Dispose();
 
         // Act & Assert
-        Assert.Throws<ObjectDisposedException>(() => _cacheAside.GetOrCreate("partition", "key", _ => "value"));
+        Assert.Throws<ObjectDisposedException>(() => _cacheAside.GetOrCreate("partition", "key", () => "value"));
     }
 
     [Fact]
@@ -400,7 +405,7 @@ public class MemoryCacheAsideTests : IDisposable
         _cacheAside.Dispose();
 
         // Act & Assert
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => _cacheAside.GetOrCreateAsync("partition", "key", _ => Task.FromResult("value")));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => _cacheAside.GetOrCreateAsync("partition", "key", () => Task.FromResult("value")));
     }
 
     [Fact]
@@ -428,9 +433,157 @@ public class MemoryCacheAsideTests : IDisposable
     {
         // This tests the internal behavior through public methods
         // Arrange & Act
-        _cacheAside.GetOrCreate("test-partition", "test-key", _ => "value");
+        _cacheAside.GetOrCreate("test-partition", "test-key", () => "value");
 
         // Assert
         _memoryCacheMock.Verify(x => x.CreateEntry("test-partition::test-key"), Times.Once);
+    }
+
+    [Fact]
+    public void GetOrCreate_ConcurrentCallsForSameKey_FactoryExecutedOnce()
+    {
+        // Arrange - use a real MemoryCache so stampede protection is fully exercised
+        using var realCache = new MemoryCache(new MemoryCacheOptions());
+        using var cacheAside = new MemoryCacheAside(realCache);
+
+        var factoryCallCount = 0;
+        var barrier = new Barrier(10);
+
+        // Act
+        var tasks = Enumerable.Range(0, 10).Select(_ => Task.Run(() =>
+        {
+            barrier.SignalAndWait();
+            return cacheAside.GetOrCreate("partition", "key", () =>
+            {
+                Interlocked.Increment(ref factoryCallCount);
+                Thread.Sleep(50); // simulate work
+                return "value";
+            });
+        })).ToArray();
+
+        Task.WaitAll(tasks);
+
+        // Assert
+        Assert.Equal(1, factoryCallCount);
+        Assert.All(tasks, t => Assert.Equal("value", t.Result));
+    }
+
+    [Fact]
+    public async Task GetOrCreateAsync_ConcurrentCallsForSameKey_FactoryExecutedOnce()
+    {
+        // Arrange
+        using var realCache = new MemoryCache(new MemoryCacheOptions());
+        using var cacheAside = new MemoryCacheAside(realCache);
+
+        var factoryCallCount = 0;
+        var barrier = new Barrier(10);
+
+        // Act
+        var tasks = Enumerable.Range(0, 10).Select(_ => Task.Run(async () =>
+        {
+            barrier.SignalAndWait();
+            return await cacheAside.GetOrCreateAsync("partition", "key", async () =>
+            {
+                Interlocked.Increment(ref factoryCallCount);
+                await Task.Delay(50);
+                return "value";
+            });
+        })).ToArray();
+
+        await Task.WhenAll(tasks);
+
+        // Assert
+        Assert.Equal(1, factoryCallCount);
+        Assert.All(tasks, t => Assert.Equal("value", t.Result));
+    }
+
+    [Fact]
+    public void GetOrCreate_WithEviction_RemovesFromPartition()
+    {
+        // Arrange - use real MemoryCache with tiny expiration to trigger eviction
+        using var realCache = new MemoryCache(new MemoryCacheOptions());
+        using var cacheAside = new MemoryCacheAside(realCache);
+
+        cacheAside.GetOrCreate("partition", "key", () => "value", TimeSpan.FromMilliseconds(50));
+        Assert.True(cacheAside.CachePartitions.ContainsKey("partition"));
+
+        // Act - wait for expiration and trigger compaction
+        Thread.Sleep(100);
+        realCache.TryGetValue("partition::key", out _); // triggers lazy expiration check
+
+        // Allow eviction callback to execute
+        Thread.Sleep(50);
+
+        // Assert
+        Assert.False(cacheAside.CachePartitions.ContainsKey("partition"));
+    }
+
+    [Fact]
+    public void GetOrCreate_WithPerCallExpiration_AppliesExpiration()
+    {
+        // Arrange
+        using var realCache = new MemoryCache(new MemoryCacheOptions());
+        using var cacheAside = new MemoryCacheAside(realCache);
+
+        // Act
+        cacheAside.GetOrCreate("partition", "key", () => "value", TimeSpan.FromMilliseconds(50));
+
+        // Assert - value should exist immediately
+        var result = cacheAside.GetOrCreate("partition", "key", () => "other-value");
+        Assert.Equal("value", result);
+
+        // Wait for expiration
+        Thread.Sleep(100);
+
+        // Value should be gone, factory should produce new value
+        var newResult = cacheAside.GetOrCreate("partition", "key", () => "new-value", TimeSpan.FromMinutes(5));
+        Assert.Equal("new-value", newResult);
+    }
+
+    [Fact]
+    public void GetOrCreate_WithDefaultExpiration_AppliesWhenNoPerCallExpiration()
+    {
+        // Arrange
+        using var realCache = new MemoryCache(new MemoryCacheOptions());
+        var options = Microsoft.Extensions.Options.Options.Create(new CacheAsideOptions
+        {
+            DefaultExpiration = TimeSpan.FromMilliseconds(50)
+        });
+        using var cacheAside = new MemoryCacheAside(realCache, options);
+
+        // Act
+        cacheAside.GetOrCreate("partition", "key", () => "value");
+
+        // Assert - value should exist immediately
+        Assert.Equal("value", cacheAside.GetOrCreate("partition", "key", () => "other"));
+
+        // Wait for default expiration
+        Thread.Sleep(100);
+
+        // Value should be expired
+        var newResult = cacheAside.GetOrCreate("partition", "key", () => "new-value");
+        Assert.Equal("new-value", newResult);
+    }
+
+    [Fact]
+    public void GetOrCreate_PerCallExpirationOverridesDefault()
+    {
+        // Arrange
+        using var realCache = new MemoryCache(new MemoryCacheOptions());
+        var options = Microsoft.Extensions.Options.Options.Create(new CacheAsideOptions
+        {
+            DefaultExpiration = TimeSpan.FromMinutes(30)
+        });
+        using var cacheAside = new MemoryCacheAside(realCache, options);
+
+        // Act - use very short per-call expiration that overrides the long default
+        cacheAside.GetOrCreate("partition", "key", () => "value", TimeSpan.FromMilliseconds(50));
+
+        // Wait for per-call expiration (much shorter than default)
+        Thread.Sleep(100);
+
+        // Assert - value should be expired despite long default
+        var result = cacheAside.GetOrCreate("partition", "key", () => "new-value");
+        Assert.Equal("new-value", result);
     }
 }

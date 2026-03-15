@@ -1,9 +1,10 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 
 namespace Edi.CacheAside.InMemory;
 
-public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside
+public class MemoryCacheAside(IMemoryCache memoryCache, IOptions<CacheAsideOptions>? options = null) : ICacheAside
 {
     /* Create Key-Value mapping for cache divisions to workaround
      * https://github.com/aspnet/Caching/issues/422
@@ -17,9 +18,11 @@ public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside
     internal ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> CachePartitions { get; } = new();
 
     private readonly IMemoryCache _memoryCache = memoryCache ?? throw new ArgumentNullException(nameof(memoryCache));
+    private readonly CacheAsideOptions _options = options?.Value ?? new CacheAsideOptions();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _keyLocks = new();
     private bool _disposed;
 
-    public TItem? GetOrCreate<TItem>(string partition, string key, Func<ICacheEntry, TItem> factory)
+    public TItem? GetOrCreate<TItem>(string partition, string key, Func<TItem> factory, TimeSpan? expiration = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(partition);
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
@@ -28,11 +31,33 @@ public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside
         ThrowIfDisposed();
 
         var cacheKey = BuildCacheKey(partition, key);
-        AddToPartition(partition, key);
-        return _memoryCache.GetOrCreate(cacheKey, factory);
+
+        if (_memoryCache.TryGetValue(cacheKey, out TItem? cached))
+        {
+            return cached;
+        }
+
+        var semaphore = _keyLocks.GetOrAdd(cacheKey, _ => new SemaphoreSlim(1, 1));
+        semaphore.Wait();
+        try
+        {
+            if (_memoryCache.TryGetValue(cacheKey, out cached))
+            {
+                return cached;
+            }
+
+            var value = factory();
+            SetCacheEntry(cacheKey, value, partition, key, expiration);
+            AddToPartition(partition, key);
+            return value;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
     }
 
-    public Task<TItem?> GetOrCreateAsync<TItem>(string partition, string key, Func<ICacheEntry, Task<TItem>> factory)
+    public async Task<TItem?> GetOrCreateAsync<TItem>(string partition, string key, Func<Task<TItem>> factory, TimeSpan? expiration = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(partition);
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
@@ -41,8 +66,30 @@ public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside
         ThrowIfDisposed();
 
         var cacheKey = BuildCacheKey(partition, key);
-        AddToPartition(partition, key);
-        return _memoryCache.GetOrCreateAsync(cacheKey, factory);
+
+        if (_memoryCache.TryGetValue(cacheKey, out TItem? cached))
+        {
+            return cached;
+        }
+
+        var semaphore = _keyLocks.GetOrAdd(cacheKey, _ => new SemaphoreSlim(1, 1));
+        await semaphore.WaitAsync();
+        try
+        {
+            if (_memoryCache.TryGetValue(cacheKey, out cached))
+            {
+                return cached;
+            }
+
+            var value = await factory();
+            SetCacheEntry(cacheKey, value, partition, key, expiration);
+            AddToPartition(partition, key);
+            return value;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
     }
 
     public void Clear()
@@ -59,6 +106,7 @@ public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside
         }
 
         CachePartitions.Clear();
+        _keyLocks.Clear();
     }
 
     public void Remove(string partition)
@@ -71,7 +119,9 @@ public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside
 
         foreach (var key in cacheKeys.Keys)
         {
-            _memoryCache.Remove(BuildCacheKey(partition, key));
+            var cacheKey = BuildCacheKey(partition, key);
+            _memoryCache.Remove(cacheKey);
+            _keyLocks.TryRemove(cacheKey, out _);
         }
 
         CachePartitions.TryRemove(partition, out _);
@@ -85,6 +135,7 @@ public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside
 
         var cacheKey = BuildCacheKey(partition, key);
         _memoryCache.Remove(cacheKey);
+        _keyLocks.TryRemove(cacheKey, out _);
 
         if (CachePartitions.TryGetValue(partition, out var keys))
         {
@@ -97,10 +148,41 @@ public class MemoryCacheAside(IMemoryCache memoryCache) : ICacheAside
         }
     }
 
+    private void SetCacheEntry<TItem>(string cacheKey, TItem value, string partition, string key, TimeSpan? expiration)
+    {
+        var entryOptions = new MemoryCacheEntryOptions();
+
+        var effectiveExpiration = expiration ?? _options.DefaultExpiration;
+        if (effectiveExpiration.HasValue)
+        {
+            entryOptions.AbsoluteExpirationRelativeToNow = effectiveExpiration;
+        }
+
+        entryOptions.RegisterPostEvictionCallback((evictedKey, val, reason, state) =>
+        {
+            RemoveFromPartition(partition, key);
+        });
+
+        _memoryCache.Set(cacheKey, value, entryOptions);
+    }
+
     private void AddToPartition(string partitionKey, string cacheKey)
     {
         var partition = CachePartitions.GetOrAdd(partitionKey, _ => new ConcurrentDictionary<string, byte>());
         partition.TryAdd(cacheKey, 0);
+    }
+
+    private void RemoveFromPartition(string partitionKey, string cacheKey)
+    {
+        if (CachePartitions.TryGetValue(partitionKey, out var partition))
+        {
+            partition.TryRemove(cacheKey, out _);
+
+            if (partition.IsEmpty)
+            {
+                CachePartitions.TryRemove(partitionKey, out _);
+            }
+        }
     }
 
     private static string BuildCacheKey(string partition, string key) => $"{partition}::{key}";

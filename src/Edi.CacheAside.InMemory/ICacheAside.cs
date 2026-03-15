@@ -1,11 +1,9 @@
-﻿using Microsoft.Extensions.Caching.Memory;
-
-namespace Edi.CacheAside.InMemory;
+﻿namespace Edi.CacheAside.InMemory;
 
 public interface ICacheAside : IDisposable
 {
-    TItem? GetOrCreate<TItem>(string partition, string key, Func<ICacheEntry, TItem> factory);
-    Task<TItem?> GetOrCreateAsync<TItem>(string partition, string key, Func<ICacheEntry, Task<TItem>> factory);
+    TItem? GetOrCreate<TItem>(string partition, string key, Func<TItem> factory, TimeSpan? expiration = null);
+    Task<TItem?> GetOrCreateAsync<TItem>(string partition, string key, Func<Task<TItem>> factory, TimeSpan? expiration = null);
     void Clear();
     void Remove(string partition);
     void Remove(string partition, string key);
